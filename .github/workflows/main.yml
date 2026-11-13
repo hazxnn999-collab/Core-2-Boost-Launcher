@@ -19,13 +19,63 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Instalar Gradle
+      - name: Instalar Gradle 8.4
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.4'
 
-      - name: Limpiar opción antigua de Java en gradle.properties
-        run: sed -i 's/-XX:MaxPermSize=256m//g' gradle.properties
+      - name: Actualizar configuración de Gradle y Android automáticamente
+        run: |
+          # 1. Limpiar parámetros antiguos de Java en gradle.properties
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
+
+          # 2. Actualizar build.gradle principal (reemplaza JCenter y AGP 2.2.3)
+          cat << 'EOF' > build.gradle
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.2'
+              }
+          }
+
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          task clean(type: Delete) {
+              delete rootProject.buildDir
+          }
+          EOF
+
+          # 3. Detectar el package del AndroidManifest.xml para el namespace
+          PKG=$(grep -o 'package="[^"]*"' app/src/main/AndroidManifest.xml | sed 's/package="//;s/"//')
+          if [ -z "$PKG" ]; then PKG="com.core2boost.launcher"; fi
+
+          # 4. Actualizar app/build.gradle manteniendo tus dependencias
+          sed -i 's/compile /implementation /g' app/build.gradle
+          sed -i 's/compile(/implementation(/g' app/build.gradle
+          sed -i 's/androidTestCompile /androidTestImplementation /g' app/build.gradle
+          sed -i 's/testCompile /testImplementation /g' app/build.gradle
+          sed -i "s/apply plugin: 'com.android.application'/plugins { id 'com.android.application' }/g" app/build.gradle
+          sed -i 's/compileSdkVersion.*/compileSdk 34/g' app/build.gradle
+          sed -i 's/targetSdkVersion.*/targetSdk 34/g' app/build.gradle
+          sed -i 's/minSdkVersion.*/minSdk 21/g' app/build.gradle
+          sed -i '/buildToolsVersion/d' app/build.gradle
+          
+          # Agregar namespace si no existe en app/build.gradle
+          if ! grep -q "namespace" app/build.gradle; then
+            sed -i "s/android {/android {\n    namespace '$PKG'/g" app/build.gradle
+          fi
 
       - name: Compilar APK
         run: gradle assembleDebug --no-daemon
@@ -35,4 +85,3 @@ jobs:
         with:
           name: Core-2-Boost-Launcher-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-
