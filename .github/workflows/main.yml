@@ -24,11 +24,15 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Limpiar opción antigua de Java en gradle.properties
+        run: sed -i 's/-XX:MaxPermSize=256m//g' gradle.properties
+
       - name: Compilar APK
-        run: gradle assembleDebug
+        run: gradle assembleDebug --no-daemon
 
       - name: Guardar APK generado
         uses: actions/upload-artifact@v4
         with:
           name: Core-2-Boost-Launcher-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+
